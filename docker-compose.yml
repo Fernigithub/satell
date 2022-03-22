@@ -3,8 +3,27 @@ version: '3.8'
 services:
   web:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0
+    command: bash -c 'while !</dev/tcp/db/5432; do sleep 1; done; uvicorn app.main:app --host 0.0.0.0'
     volumes:
       - .:/app
     ports:
       - 8008:8000
+    environment:
+      - DATABASE_URL=postgresql://fastapi_satellogic:fastapi_satellogic@db:5432/fastapi_satellogic
+    depends_on:
+      - db
+  db:
+    image: postgis/postgis
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    expose:
+      - 5432
+    environment:
+      - POSTGRES_USER=fastapi_satellogic
+      - POSTGRES_PASSWORD=fastapi_satellogic
+      - POSTGRES_DB=fastapi_satellogic
+    ports:
+      - 5433:5432
+
+volumes:
+  postgres_data:
