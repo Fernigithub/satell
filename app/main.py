@@ -1,22 +1,20 @@
 from fastapi import FastAPI , HTTPException
 import json
-from app.db import con, area , engine, session, db
+
+# from pyrsistent import optional
+from .db import con, area , engine, session , data
 from pydantic import BaseModel
-from typing import Optional
 from json import dumps
 from sqlalchemy.orm import class_mapper
-
+from sqlalchemy import func
 
 app = FastAPI(title="FastAPI, Docker")
 
 
-
 def serialize(model):
   """Transforms a model into a dictionary which can be dumped to JSON."""
-  # first we get the names of all the columns on your model
   columns = [c.key for c in class_mapper(model.__class__).columns]
-  # then we return their values in a dict
-  return dict((c, getattr(model, c)) for c in columns)
+  return dict((c, str(getattr(model, c))) for c in columns)
 
 class Item(BaseModel):
     name: str
@@ -24,35 +22,103 @@ class Item(BaseModel):
     area: str
     properties: dict
 
-@app.get("/")
-async def read_root():
-    data = db.Table('area', db.MetaData(engine) ,autoload=True,autoload_with=engine)
-    return data.columns.keys()
 
-@app.get("/retrieve/{id}")
-async def read_id():
+@app.get("/retrieve/id/{id}")
+async def read_id(id: int):
     item = session.get(area, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="area id not found")
     return serialize(item)
+
 
 @app.post("/save/")
 async def create_item(item: Item):
     try:
+        valid = session.query(func.ST_IsValid(func.ST_GeomFromText(item.area))).first()[0]
+    except:
+        session.rollback()
+        return {"Error": "The Polygon is not valid"}
+    
+    try:
         poly = area(name=item.name, date=item.date, area=item.area , properties=item.properties)
         session.add(poly)
         session.commit()
-    except Exception as e:
-        print(e)
-        return {"error": e}
-    return "saved"
+    except:
+        session.rollback()
+        return {"Error": "The name already exist"}
 
-@app.delete("/delete/{area_id}")
-def delete_item(area_id: int):
-    area_id = session.get(area, area_id)
+    return {"Ok": "Saved"}
+
+@app.delete("/delete/{name_str}")
+async def delete_item(name_str: str):
+    area_id = session.query(area).filter_by(name=name_str).first()
     if not area_id:
-        raise HTTPException(status_code=404, detail="area id not found")
+        raise HTTPException(status_code=404, detail="name not found")
     session.delete(area_id)
     session.commit()
-    return {"ok": True}
+    return {"ok": "Deleted"}
+
+@app.get("/retrieve/name/{name}")
+async def read_name(name: str):
+    item = session.query(data).filter_by(name=name).all()
+    res = []
+    for u in item:
+        dictio = dict(zip(data.columns.keys(), list(u)))
+        res.append(dictio)
+        
+    sort_res = sorted(res, key=lambda k: k['name'] , reverse=True)
+    if not item:
+        raise HTTPException(status_code=404, detail="name id not found")
+    return str(sort_res)
+
+@app.get("/retrieve/area/{area_str}")
+async def read_area(area_str: str):
+    item = session.query(data).all()
+    res = []
+    for u in item:
+        sup = int(session.query(func.ST_Area(u.area)).scalar())
+        k = list(data.columns.keys())
+        v = list(u)
+        k.append("sup")
+        v.append(sup)
+        inter = session.query(func.ST_Intersects(u.area,func.ST_GeomFromEWKT(area_str)))
+        if inter.all()[0][0]:
+            dictio = dict(zip(k, v))
+            res.append(dictio)
+        
+    sort_res = sorted(res, key=lambda k: k['sup'] , reverse=True)
+    return str(sort_res)
+
+@app.get("/retrieve/inter/{area_str}")
+async def inter_area(area_str: str):
+    item = session.query(data).all()
+    res = []
+    for u in item:
+        inter = session.query(func.ST_Intersection(u.area,func.ST_GeomFromEWKT(area_str)))
+        new_pol = session.query(func.ST_AsText(inter.all()[0][0]))
+        res.append(new_pol.all()[0][0])
+    return res
+
+@app.get("/retrieve/prop/{prop_str}")
+async def read_prop(prop_str: str):
+    prop_str = prop_str.replace("'",'"')
+    prop_str = json.loads(prop_str)
+    res = []
+    for u in session.query(data).all():
+        sup = int(session.query(func.ST_Area(u.area)).scalar())
+        k = list(data.columns.keys())
+        v = list(u)
+        k.append("sup")
+        v.append(sup)
+        dictio = dict(zip(k, v))
+        prop = u.properties
+        shared_items = {k: prop[k] for k in prop if k in prop_str and prop[k] == prop_str[k]}
+        if shared_items:
+            res.append(dictio)
+        
+    sort_res = sorted(res, key=lambda k: k['sup'] , reverse=True) 
+    return str(sort_res)
+
 
 @app.on_event("startup")
 async def startup():
@@ -61,13 +127,16 @@ async def startup():
     # create a dummy entry
     try:
         area.__table__.drop(engine)
-        print("se elimino la tabla")
+        print("area table dropped")
     except Exception as e:
-        print('no se elimino la tabla',e)
+        pass
     area.__table__.create(engine)
-    # poly = area(name='satellogic', date = '2022-01-01', area ='POLYGON((0 0,1 0,1 1,0 1,0 0))' , properties = {'name':'satellogic'})
-    # session.add(poly)
-    # session.commit()
+    pol1 = area(name='satellogic_1', date = '2022-01-01', area ='POLYGON((0 0,1 0,1 1,0 1,0 0))' , properties = {'name':'satellogic','crop':'wheat'})
+    pol2 = area(name='satellogic_2', date = '2022-01-01', area ='POLYGON((0 0,2 0,2 2,0 2,0 0))' , properties = {'name':'satellogic','crop':'soybean'})
+    pol3 = area(name='displaced', date = '2022-01-01', area ='POLYGON((2 2,3 2,3 3,2 3,2 2))' , properties = {'name':'satellogic','crop':'soybean'})
+    pol4 = area(name='bigger', date = '2022-01-01', area ='POLYGON((1 1,3 1,3 3,1 3,1 1))' , properties = {'name':'satellogic','crop':'maize'})
+    session.add_all([pol1,pol2,pol3,pol4])
+    session.commit()
     
 
 @app.on_event("shutdown")
