@@ -25,9 +25,13 @@ class Item(BaseModel):
 
 @app.get("/retrieve/id/{id}")
 async def read_id(id: int):
-    item = session.get(area, id)
-    if not item:
-        raise HTTPException(status_code=404, detail="area id not found")
+    try:
+        item = session.get(area, id)
+        if not item:
+            raise HTTPException(status_code=404, detail="area id not found")
+    except Exception as e:
+        session.rollback()
+        return {"Error": e}
     return serialize(item)
 
 
@@ -51,72 +55,92 @@ async def create_item(item: Item):
 
 @app.delete("/delete/{name_str}")
 async def delete_item(name_str: str):
-    area_id = session.query(area).filter_by(name=name_str).first()
-    if not area_id:
-        raise HTTPException(status_code=404, detail="name not found")
-    session.delete(area_id)
-    session.commit()
+    try:
+        area_id = session.query(area).filter_by(name=name_str).first()
+        if not area_id:
+            raise HTTPException(status_code=404, detail="name not found")
+        session.delete(area_id)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        return {"Error": e}
     return {"ok": "Deleted"}
 
 @app.get("/retrieve/name/{name}")
 async def read_name(name: str):
-    item = session.query(data).filter_by(name=name).all()
-    res = []
-    for u in item:
-        dictio = dict(zip(data.columns.keys(), list(u)))
-        res.append(dictio)
-        
-    sort_res = sorted(res, key=lambda k: k['name'] , reverse=True)
-    if not item:
-        raise HTTPException(status_code=404, detail="name id not found")
+    try:
+        item = session.query(data).filter_by(name=name).all()
+        res = []
+        for u in item:
+            dictio = dict(zip(data.columns.keys(), list(u)))
+            res.append(dictio)
+            
+        sort_res = sorted(res, key=lambda k: k['name'] , reverse=True)
+        if not item:
+            raise HTTPException(status_code=404, detail="name id not found")
+    except Exception as e:
+        session.rollback()
+        return {"Error": e}
     return str(sort_res)
 
 @app.get("/retrieve/area/{area_str}")
 async def read_area(area_str: str):
-    item = session.query(data).all()
-    res = []
-    for u in item:
-        sup = int(session.query(func.ST_Area(u.area)).scalar())
-        k = list(data.columns.keys())
-        v = list(u)
-        k.append("sup")
-        v.append(sup)
-        inter = session.query(func.ST_Intersects(u.area,func.ST_GeomFromEWKT(area_str)))
-        if inter.all()[0][0]:
-            dictio = dict(zip(k, v))
-            res.append(dictio)
-        
-    sort_res = sorted(res, key=lambda k: k['sup'] , reverse=True)
+    try:
+        item = session.query(data).all()
+        res = []
+        for u in item:
+            sup = int(session.query(func.ST_Area(u.area)).scalar())
+            k = list(data.columns.keys())
+            v = list(u)
+            k.append("sup")
+            v.append(sup)
+            inter = session.query(func.ST_Intersects(u.area,func.ST_GeomFromEWKT(area_str)))
+            if inter.all()[0][0]:
+                dictio = dict(zip(k, v))
+                res.append(dictio)
+            
+        sort_res = sorted(res, key=lambda k: k['sup'] , reverse=True)
+    except Exception as e:
+        session.rollback()
+        return {"Error": e}
     return str(sort_res)
 
 @app.get("/retrieve/inter/{area_str}")
 async def inter_area(area_str: str):
-    item = session.query(data).all()
-    res = []
-    for u in item:
-        inter = session.query(func.ST_Intersection(u.area,func.ST_GeomFromEWKT(area_str)))
-        new_pol = session.query(func.ST_AsText(inter.all()[0][0]))
-        res.append(new_pol.all()[0][0])
+    try:
+        item = session.query(data).all()
+        res = []
+        for u in item:
+            inter = session.query(func.ST_Intersection(u.area,func.ST_GeomFromEWKT(area_str)))
+            new_pol = session.query(func.ST_AsText(inter.all()[0][0]))
+            res.append(new_pol.all()[0][0])
+    except Exception as e:
+        session.rollback()
+        return {"Error": e}
     return res
 
 @app.get("/retrieve/prop/{prop_str}")
 async def read_prop(prop_str: str):
-    prop_str = prop_str.replace("'",'"')
-    prop_str = json.loads(prop_str)
-    res = []
-    for u in session.query(data).all():
-        sup = int(session.query(func.ST_Area(u.area)).scalar())
-        k = list(data.columns.keys())
-        v = list(u)
-        k.append("sup")
-        v.append(sup)
-        dictio = dict(zip(k, v))
-        prop = u.properties
-        shared_items = {k: prop[k] for k in prop if k in prop_str and prop[k] == prop_str[k]}
-        if shared_items:
-            res.append(dictio)
-        
-    sort_res = sorted(res, key=lambda k: k['sup'] , reverse=True) 
+    try:
+        prop_str = prop_str.replace("'",'"')
+        prop_str = json.loads(prop_str)
+        res = []
+        for u in session.query(data).all():
+            sup = int(session.query(func.ST_Area(u.area)).scalar())
+            k = list(data.columns.keys())
+            v = list(u)
+            k.append("sup")
+            v.append(sup)
+            dictio = dict(zip(k, v))
+            prop = u.properties
+            shared_items = {k: prop[k] for k in prop if k in prop_str and prop[k] == prop_str[k]}
+            if shared_items:
+                res.append(dictio)
+            
+        sort_res = sorted(res, key=lambda k: k['sup'] , reverse=True)
+    except Exception as e:
+        session.rollback()
+        return {"Error": e} 
     return str(sort_res)
 
 
