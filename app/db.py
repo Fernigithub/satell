@@ -9,21 +9,19 @@ metadata = db.MetaData()
 
 
 Base = declarative_base()
-USER_ID_SEQ = Sequence('user_id_seq')
+# USER_ID_SEQ = Sequence('user_id_seq')
+
 class area(Base):
     __tablename__ = 'area'
-    id = Column(Integer, USER_ID_SEQ ,server_default=USER_ID_SEQ.next_value())
+    # id = Column(Integer, USER_ID_SEQ ,server_default=USER_ID_SEQ.next_value())
     name = Column(String(50), primary_key=True)
-    # date = Column(DateTime(timezone=True))
     date = Column(String(50))
     properties = Column(JSON)
     area = Column(Geometry('POLYGON'))
 
 engine = db.create_engine(settings.db_url)
-metadata.create_all(engine)
 con = engine.connect()
 
-data = db.Table('area', db.MetaData(engine) ,autoload=True,autoload_with=engine)
 Session = sessionmaker(bind=engine)
 session = Session()
 

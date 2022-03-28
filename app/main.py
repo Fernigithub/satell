@@ -2,11 +2,15 @@ from fastapi import FastAPI , HTTPException
 import json
 
 # from pyrsistent import optional
-from .db import con, area , engine, session , data
+from .db import con, area , engine, session
 from pydantic import BaseModel
 from json import dumps
 from sqlalchemy.orm import class_mapper
 from sqlalchemy import func
+import sqlalchemy as db
+
+import subprocess
+
 
 app = FastAPI(title="FastAPI, Docker")
 
@@ -154,14 +158,20 @@ async def startup():
         print("area table dropped")
     except Exception as e:
         pass
-    area.__table__.create(engine)
+    area.__table__.create(engine, checkfirst=True)
     pol1 = area(name='satellogic_1', date = '2022-01-01', area ='POLYGON((0 0,1 0,1 1,0 1,0 0))' , properties = {'name':'satellogic','crop':'wheat'})
     pol2 = area(name='satellogic_2', date = '2022-01-01', area ='POLYGON((0 0,2 0,2 2,0 2,0 0))' , properties = {'name':'satellogic','crop':'soybean'})
     pol3 = area(name='displaced', date = '2022-01-01', area ='POLYGON((2 2,3 2,3 3,2 3,2 2))' , properties = {'name':'satellogic','crop':'soybean'})
     pol4 = area(name='bigger', date = '2022-01-01', area ='POLYGON((1 1,3 1,3 3,1 3,1 1))' , properties = {'name':'satellogic','crop':'maize'})
     session.add_all([pol1,pol2,pol3,pol4])
     session.commit()
-    
+    global data
+    data = db.Table('area', db.MetaData(engine) ,autoload=True, autoload_with=engine )
+    print('Start API')
+
+
+
+   
 
 @app.on_event("shutdown")
 async def shutdown():
