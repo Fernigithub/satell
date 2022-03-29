@@ -154,10 +154,12 @@ async def startup():
         await engine.connect()
     # create a dummy entry
     try:
+        print("delete table if it exists")
         area.__table__.drop(engine)
-        print("area table dropped")
+        print("table dropped")
     except Exception as e:
         pass
+    print('Create Table')
     area.__table__.create(engine, checkfirst=True)
     pol1 = area(name='satellogic_1', date = '2022-01-01', area ='POLYGON((0 0,1 0,1 1,0 1,0 0))' , properties = {'name':'satellogic','crop':'wheat'})
     pol2 = area(name='satellogic_2', date = '2022-01-01', area ='POLYGON((0 0,2 0,2 2,0 2,0 0))' , properties = {'name':'satellogic','crop':'soybean'})
@@ -167,11 +169,8 @@ async def startup():
     session.commit()
     global data
     data = db.Table('area', db.MetaData(engine) ,autoload=True, autoload_with=engine )
-    print('Start API')
-
-
-
-   
+    print('Running tests')
+    res = subprocess.run(["python3", "./test.py"] , shell = False , stdout = subprocess.PIPE)
 
 @app.on_event("shutdown")
 async def shutdown():
