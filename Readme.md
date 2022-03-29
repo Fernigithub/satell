@@ -16,6 +16,8 @@ http://localhost:8008/docs
 
 # Try me
 
+[Download Postman Collection](Satellogic.postman_collection.json) 
+
 SAVE 
 
 ```properties
@@ -82,7 +84,6 @@ print(response.text)
 
 
 # Utils
-
 
 <code> <i>DataBase</i> </code>
 
